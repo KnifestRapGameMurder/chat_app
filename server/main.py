@@ -10,28 +10,37 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((host, port))
 server.listen()
 
-clients = []
-nicknames = []
+users = []
 
 
-def broadcast(message):
-    print(message.decode(ENCODING))
-    for client in clients:
-        client.send(message)
+class User:
+    def __init__(self, client, nickname):
+        self.client = client
+        self.nickname = nickname
+        pass
 
 
-def handle(client):
+def broadcast(user, message):
+    for u in users:
+        if u is not user:
+            u.client.send(message)
+
+
+def handle(user: User):
+    client = user.client
+    nickname = user.nickname
     while True:
         try:
             message = client.recv(1024)
-            broadcast(message)
+            message = message.decode(ENCODING)
+            message = "{}: {}".format(user.nickname, message)
+            print(message)
+            message = message.encode(ENCODING)
+            broadcast(user, message)
         except:
-            index = clients.index(client)
-            clients.remove(client)
             client.close()
-            nickname = nicknames[index]
-            broadcast("{} left!".format(nickname).encode(ENCODING))
-            nicknames.remove(nickname)
+            broadcast(user, "{} left!".format(nickname).encode(ENCODING))
+            users.remove(user)
             break
 
 
@@ -42,14 +51,14 @@ def receive():
 
         client.send("NICK".encode(ENCODING))
         nickname = client.recv(1024).decode(ENCODING)
-        nicknames.append(nickname)
-        clients.append(client)
+        user = User(client, nickname)
+        users.append(user)
 
         print("Nickname is {}".format(nickname))
-        broadcast("{} joined!".format(nickname).encode(ENCODING))
+        broadcast(user, "{} joined!".format(nickname).encode(ENCODING))
         client.send("Connected to server!".encode(ENCODING))
 
-        thread = threading.Thread(target=handle, args=(client,))
+        thread = threading.Thread(target=handle, args=(user,))
         thread.start()
 
 
