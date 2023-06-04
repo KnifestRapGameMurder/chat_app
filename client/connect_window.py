@@ -1,4 +1,3 @@
-import sys
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -9,7 +8,7 @@ class ConnectWindow(QMainWindow):
         super(ConnectWindow, self).__init__()
         self.size = QSize(350, 250)
         self.resize(self.size)
-        self.setWindowTitle("My Window")
+        self.setWindowTitle("Connection")
         self.initUI()
 
     def setIP(self, ip_address):

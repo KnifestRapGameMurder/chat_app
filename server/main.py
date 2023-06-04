@@ -14,16 +14,15 @@ users = []
 
 
 class User:
-    def __init__(self, client, nickname):
+    def __init__(self, client: socket.socket, nickname: str):
         self.client = client
         self.nickname = nickname
         pass
 
 
-def broadcast(user, message):
+def broadcast(user: User, message: str):
     for u in users:
-        if u is not user:
-            u.client.send(message)
+        u.client.send(message)
 
 
 def handle(user: User):
@@ -40,8 +39,8 @@ def handle(user: User):
         except:
             client.close()
             print("{} left!".format(nickname))
-            broadcast(user, "{} left!".format(nickname).encode(ENCODING))
             users.remove(user)
+            broadcast(user, "{} left!".format(nickname).encode(ENCODING))
             break
 
 
@@ -57,7 +56,6 @@ def receive():
 
         print("Nickname is {}".format(nickname))
         broadcast(user, "{} joined!".format(nickname).encode(ENCODING))
-        client.send("Connected to server!".encode(ENCODING))
 
         thread = threading.Thread(target=handle, args=(user,))
         thread.start()
