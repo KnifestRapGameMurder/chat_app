@@ -1,4 +1,5 @@
 import sys
+import json
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import QApplication
 from connect_window import ConnectWindow
@@ -7,12 +8,17 @@ from main_window import MainWindow
 import socket
 import threading
 
+import json_utils.json_keys as json_keys
+import json_utils.message_types as message_types
+import json_utils.error_types as error_types
+
 
 ENCODING = "ascii"
 
 
 class MySignal(QObject):
     message_sig = pyqtSignal(str)
+    users_sig = pyqtSignal(list)
 
 
 class ClientApp:
@@ -36,11 +42,13 @@ class ClientApp:
         self.is_client_active = True
 
         self.main_window = MainWindow()
-        self.main_window.setWindowTitle("Client: " + self.nickname)
+        self.main_window.setNickname(self.nickname)
+
         self.main_window.show()
 
         self.signal = MySignal()
         self.signal.message_sig.connect(self.main_window.addMessageToHistory)
+        self.signal.users_sig.connect(self.main_window.setUsers)
 
         receive_thread = threading.Thread(target=self.receive)
         receive_thread.start()
@@ -52,11 +60,24 @@ class ClientApp:
     def receive(self):
         while self.is_client_active:
             try:
-                message = self.client.recv(1024).decode(ENCODING)
-                if message == "NAME":
-                    self.client.send(self.nickname.encode(ENCODING))
+                raw_message = self.client.recv(1024).decode(ENCODING)
+                received = json.loads(raw_message)
+                print(received[json_keys.TYPE])
+                if received[json_keys.TYPE] == message_types.NAME_REQ:
+                    self.client.send(
+                        json.dumps(
+                            {
+                                json_keys.TYPE: message_types.NAME_RESP,
+                                json_keys.NAME: self.nickname,
+                            }
+                        ).encode(ENCODING)
+                    )
+                elif received[json_keys.TYPE] == message_types.USERS:
+                    users = received[json_keys.USERS]
+                    # self.main_window.setUsers(users)
+                    self.signal.users_sig.emit(users)
                 else:
-                    self.signal.message_sig.emit(message)
+                    self.signal.message_sig.emit(raw_message)
             except:
                 if self.is_client_active:
                     print("An error occured!")
@@ -72,44 +93,3 @@ class ClientApp:
 
 
 app = ClientApp()
-
-
-#########################################
-
-# import socket
-# import threading
-# import
-
-# ENCODING = "ascii"
-
-# nickname = input("Choose your nickname: ")
-
-# client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# client.connect(("127.0.0.1", 55555))
-
-
-# def receive():
-#     while True:
-#         try:
-#             message = client.recv(1024).decode(ENCODING)
-#             if message == "NICK":
-#                 client.send(nickname.encode(ENCODING))
-#             else:
-#                 print(message)
-#         except:
-#             print("An error occured!")
-#             client.close()
-#             break
-
-
-# def write():
-#     while True:
-#         message = input("")
-#         client.send(message.encode(ENCODING))
-
-
-# receive_thread = threading.Thread(target=receive)
-# receive_thread.start()
-
-# write_thread = threading.Thread(target=write)
-# write_thread.start()
