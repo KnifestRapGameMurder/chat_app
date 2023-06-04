@@ -1,13 +1,13 @@
 import socket
 import threading
 
-host = "127.0.0.1"
-port = 55555
-
+SERVER = "127.0.0.1"
+PORT = 55555
+ADDRESS = (SERVER, PORT)
 ENCODING = "ascii"
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((host, port))
+server.bind(ADDRESS)
 server.listen()
 
 users = []
@@ -39,6 +39,7 @@ def handle(user: User):
             broadcast(user, message)
         except:
             client.close()
+            print("{} left!".format(nickname))
             broadcast(user, "{} left!".format(nickname).encode(ENCODING))
             users.remove(user)
             break
@@ -49,7 +50,7 @@ def receive():
         client, address = server.accept()
         print("Connected with {}".format(str(address)))
 
-        client.send("NICK".encode(ENCODING))
+        client.send("NAME".encode(ENCODING))
         nickname = client.recv(1024).decode(ENCODING)
         user = User(client, nickname)
         users.append(user)
