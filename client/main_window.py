@@ -10,7 +10,7 @@ class MainWindow(QMainWindow):
         self.resize(self.size)
         self.setWindowTitle("Client")
         self.initUI()
-        self.user_btns = []
+        self.user_btns = dict()
 
     def initUI(self):
         self.centralwidget = QWidget(self)
@@ -101,23 +101,23 @@ class MainWindow(QMainWindow):
             self.sendCallback(message)
             self.input_field.clear()
 
-    def setUsers(self, users: list):
-        print(users)
+    def setChats(self, chats: dict):
+        print("setChats")
+        print(chats)
         
-        for user_btn in self.user_btns:
-            user_btn.destroy()
+        for chat_id in self.user_btns:
+            self.user_btns[chat_id].deleteLater()
 
         self.user_btns.clear()
 
-        for user in users:
-            if user != self.nickname:
-                user_btn = QPushButton(self.users_container)
-                user_btn.setMinimumSize(0, 50)
-                user_btn.setText(user)
-                userName = user
-                user_btn.clicked.connect(lambda: self.onUserBtnClick(userName))
-                self.verticalLayout_3.addWidget(user_btn)
-                self.user_btns.append(user_btn)
+        for chat_id in chats:
+            user_name = chats[chat_id]
+            user_btn = QPushButton(self.users_container)
+            user_btn.setMinimumSize(0, 50)
+            user_btn.setText(user_name)
+            user_btn.clicked.connect(lambda state, x=chat_id: self.onChatBtnClick(x))
+            self.verticalLayout_3.addWidget(user_btn)
+            self.user_btns[chat_id] = user_btn
 
         self.verticalLayout_3.removeItem(self.verticalSpacer)
         self.verticalLayout_3.addItem(self.verticalSpacer)
@@ -125,10 +125,17 @@ class MainWindow(QMainWindow):
     def setUserSelectCallback(self, callback):
         self.userSelectCallback = callback
 
-    def onUserBtnClick(self, userName: str):
-        self.userSelectCallback(userName)
+    def onChatBtnClick(self, chat_id):
+        for btn_chat_id in self.user_btns:
+            self.user_btns[btn_chat_id].setStyleSheet("")
 
-    def addMessageToHistory(self, message):
+        self.user_btns[chat_id].setStyleSheet("background-color: red")
+        self.userSelectCallback(chat_id)
+
+    def clearChat(self):
+        self.chat_history.clear()
+
+    def addMessageToHistory(self, message: str):
         chat = self.chat_history.toPlainText()
         chat += "\n\n"
         chat += message

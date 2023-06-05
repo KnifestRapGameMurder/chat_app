@@ -15,8 +15,9 @@ import json_utils.success_types as success_types
 
 
 class MySignal(QObject):
-    message_sig = pyqtSignal(object)
-    users_sig = pyqtSignal(list)
+    clear_chat_sig = pyqtSignal()
+    message_sig = pyqtSignal(str)
+    chats_sig = pyqtSignal(dict)
     connect_sig = pyqtSignal()
 
 
@@ -28,6 +29,8 @@ class ClientApp:
         self.connect_window.nickname_input.setText("Bohdan")
         self.connect_window.setConnectCallback(self.onConnect)
         self.is_client_active = False
+        self.current_chat_id = ""
+        self.chats = dict()
 
         self.connect_window.show()
         sys.exit(self.app.exec_())
@@ -69,11 +72,16 @@ class ClientApp:
                             }
                         )
                     )
-                elif recv_type == message_types.USERS:
-                    users = received[json_keys.USERS]
-                    self.signal.users_sig.emit(users)
+                elif recv_type == message_types.CHATS:
+                    chats = received[json_keys.CHATS]
+                    print(chats)
+                    self.chats = chats
+                    self.signal.chats_sig.emit(chats)
+                elif recv_type == message_types.DIRECT:
+                    self.handleDirectMessage(received)
                 else:
-                    self.signal.message_sig.emit(received)
+                    print("No specified action for: " + recv_type)
+                    # self.signal.message_sig.emit(received)
             except:
                 if self.is_client_active:
                     print("An error occured!")
@@ -94,17 +102,44 @@ class ClientApp:
         self.main_window.setUserSelectCallback(self.onUserSelect)
         self.main_window.setSendCallback(self.sendMessage)
 
-        # self.signal.message_sig.connect(self.main_window.addMessageToHistory)
-        self.signal.users_sig.connect(self.main_window.setUsers)
-
+        self.signal.message_sig.connect(self.main_window.addMessageToHistory)
+        self.signal.chats_sig.connect(self.main_window.setChats)
+        self.signal.clear_chat_sig.connect(self.main_window.clearChat)
         self.main_window.show()
         self.app.lastWindowClosed.connect(self.closeClient)
 
-    def onUserSelect(self, userName: str):
-        print(userName)
+    def onUserSelect(self, chat_id):
+        print("Selected chat ID: " + chat_id)
+        if chat_id != self.current_chat_id:
+            self.signal.clear_chat_sig.emit()
+            self.current_chat_id = chat_id
+
+            self.client.send(
+                serialize(
+                    {
+                        json_keys.TYPE: message_types.GET_CHAT,
+                        json_keys.CHAT_ID: chat_id,
+                    }
+                )
+            )
+
+    def handleDirectMessage(self, received):
+        if received[json_keys.CHAT_ID] == self.current_chat_id:
+            message_obj = received[json_keys.MESSAGE]
+            message = "{}: {}".format(message_obj["Sender"], message_obj["Text"])
+            self.signal.message_sig.emit(message)
 
     def sendMessage(self, message):
-        self.client.send(message.encode(ENCODING))
+        if self.current_chat_id != "":
+            self.client.send(
+                serialize(
+                    {
+                        json_keys.TYPE: message_types.DIRECT,
+                        json_keys.CHAT_ID: self.current_chat_id,
+                        json_keys.MESSAGE: message,
+                    }
+                )
+            )
 
     def closeClient(self):
         self.is_client_active = False

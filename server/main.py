@@ -16,20 +16,20 @@ server.bind(ADDRESS)
 server.listen()
 
 
-class Message:
-    def __init__(self):
-        self.sender: User
-        self.text = ""
-
-
 class User:
     def __init__(self, client: socket.socket, nickname: str):
         self.client = client
         self.nickname = nickname
 
 
+class Message:
+    def __init__(self, sender: User, text: str):
+        self.sender = sender
+        self.text = text
+
+
 class ChatHistory:
-    def __init__(self, users):
+    def __init__(self, users: list[User]):
         self.users = users
         self.messages = []
 
@@ -37,7 +37,9 @@ class ChatHistory:
 class ServerApp:
     def __init__(self):
         self.users = []
-        self.chat_histories = []
+        self.last_chat_id = 0
+        self.chat_histories = dict()
+        self.users_chat_histories = dict()
         self.receive()
 
     def receive(self):
@@ -82,22 +84,21 @@ class ServerApp:
             )
         )
 
+        self.users_chat_histories[user] = dict()
+
         for u in self.users:
             chat = ChatHistory([u, user])
+            self.chat_histories[self.last_chat_id] = chat
+
+            self.users_chat_histories[user][self.last_chat_id] = chat
+            self.users_chat_histories[u][self.last_chat_id] = chat
+
+            self.last_chat_id += 1
 
         self.users.append(user)
         print("Nickname is {}".format(userName))
-        users_names = list(map(lambda u: u.nickname, self.users))
 
-        self.broadcast(
-            user,
-            serialize(
-                {
-                    json_keys.TYPE: message_types.USERS,
-                    json_keys.USERS: users_names,
-                }
-            ),
-        )
+        self.sendChats()
 
         thread = threading.Thread(target=self.handle, args=(user,))
         thread.start()
@@ -105,24 +106,101 @@ class ServerApp:
     def handle(self, user: User):
         client = user.client
         nickname = user.nickname
+        print("Handling: " + nickname)
         while True:
             try:
-                recv = client.recv(1024)
-                print(recv)
-                received = deserialize(recv)
-                print(received[json_keys.TYPE])
+                received = deserialize(client.recv(1024))
+                recv_type = received[json_keys.TYPE]
+                print(nickname + ": " + recv_type)
 
-                # message = message.decode(ENCODING)
-                # message = "{}: {}".format(user.nickname, message)
-                # print(message)
-                # message = message.encode(ENCODING)
-                # self.broadcast(user, message)
+                if recv_type == message_types.GET_CHAT:
+                    chat_id = received[json_keys.CHAT_ID]
+                    print("Chat ID: " + chat_id)
+                    print(self.users_chat_histories[user])
+                    chat: ChatHistory = self.users_chat_histories[user][int(chat_id)]
+
+                    for message in chat.messages:
+                        print(
+                            "{} -> {}: {}".format(
+                                message.sender.nickname, nickname, message.text
+                            )
+                        )
+                        
+                        client.send(
+                            serialize(
+                                {
+                                    json_keys.TYPE: message_types.DIRECT,
+                                    json_keys.CHAT_ID: chat_id,
+                                    json_keys.MESSAGE: {
+                                        "Sender": message.sender.nickname,
+                                        "Text": message.text,
+                                    },
+                                }
+                            )
+                        )
+
+                elif recv_type == message_types.DIRECT:
+                    chat_id = received[json_keys.CHAT_ID]
+                    message = received[json_keys.MESSAGE]
+                    print(chat_id)
+                    print(message)
+
+                    chat: ChatHistory = self.users_chat_histories[user][int(chat_id)]
+                    chat.messages.append(Message(user, message))
+
+                    data = serialize(
+                        {
+                            json_keys.TYPE: message_types.DIRECT,
+                            json_keys.CHAT_ID: chat_id,
+                            json_keys.MESSAGE: {
+                                "Sender": nickname,
+                                "Text": message,
+                            },
+                        }
+                    )
+                    for ch_u in chat.users:
+                        ch_u.client.send(data)
+
             except:
+                print("An error occured!")
                 client.close()
-                print("{} left!".format(nickname))
                 self.users.remove(user)
-                # self.broadcast(user, "{} left!".format(nickname).encode(ENCODING))
+
+                temp_chat_histories = dict()
+                for chat_id in self.chat_histories:
+                    if user not in self.chat_histories[chat_id].users:
+                        temp_chat_histories[chat_id] = self.chat_histories[chat_id]
+                self.chat_histories = temp_chat_histories
+
+                self.sendChats()
+
                 break
+
+    def sendChats(self):
+        print("sendChats")
+
+        for u in self.users:
+            json_chats = dict()
+
+            chats = self.users_chat_histories[u]
+            for chat_id in chats:
+                other_user_name = next(
+                    ch_u.nickname for ch_u in chats[chat_id].users if ch_u is not u
+                )
+
+                json_chats[chat_id] = other_user_name
+
+            u.client.send(
+                serialize(
+                    {
+                        json_keys.TYPE: message_types.CHATS,
+                        json_keys.CHATS: json_chats,
+                    }
+                ),
+            )
+
+    def getChat(self, chat_id):
+        return self.chat_histories[chat_id]
 
     def broadcast(self, user: User, message: bytes):
         for u in self.users:
