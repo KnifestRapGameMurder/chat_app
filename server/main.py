@@ -1,102 +1,132 @@
 import socket
 import threading
-import json
 
+from json_utils.methods import *
 import json_utils.json_keys as json_keys
 import json_utils.message_types as message_types
 import json_utils.error_types as error_types
+import json_utils.success_types as success_types
 
 SERVER = "127.0.0.1"
 PORT = 55555
 ADDRESS = (SERVER, PORT)
-ENCODING = "ascii"
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(ADDRESS)
 server.listen()
 
-users = []
+
+class Message:
+    def __init__(self):
+        self.sender: User
+        self.text = ""
 
 
 class User:
     def __init__(self, client: socket.socket, nickname: str):
         self.client = client
         self.nickname = nickname
-        pass
 
 
-def broadcast(user: User, message: str):
-    for u in users:
-        u.client.send(message)
+class ChatHistory:
+    def __init__(self, users):
+        self.users = users
+        self.messages = []
 
 
-def handle(user: User):
-    client = user.client
-    nickname = user.nickname
-    while True:
-        try:
-            message = client.recv(1024)
-            message = message.decode(ENCODING)
-            message = "{}: {}".format(user.nickname, message)
-            print(message)
-            message = message.encode(ENCODING)
-            broadcast(user, message)
-        except:
-            client.close()
-            print("{} left!".format(nickname))
-            users.remove(user)
-            broadcast(user, "{} left!".format(nickname).encode(ENCODING))
-            break
+class ServerApp:
+    def __init__(self):
+        self.users = []
+        self.chat_histories = []
+        self.receive()
 
+    def receive(self):
+        while True:
+            client, address = server.accept()
+            print("Connected with {}".format(str(address)))
 
-def receive():
-    while True:
-        client, address = server.accept()
-        print("Connected with {}".format(str(address)))
+            client.send(serialize({json_keys.TYPE: message_types.NAME_REQ}))
 
-        client.send(
-            json.dumps({json_keys.TYPE: message_types.NAME_REQ}).encode(ENCODING)
+            try:
+                response = deserialize(client.recv(1024))
+                print(response[json_keys.TYPE])
+
+                if response[json_keys.TYPE] == message_types.NAME_RESP:
+                    nickname = response[json_keys.NAME]
+
+                    if any(u.nickname == nickname for u in self.users):
+                        client.send(
+                            serialize(
+                                {
+                                    json_keys.TYPE: message_types.ERROR,
+                                    json_keys.ERROR_TYPE: error_types.NAME_TAKEN,
+                                }
+                            )
+                        )
+                    else:
+                        self.addUser(client, nickname)
+                else:
+                    print("Name expected, but wrong type received!")
+            except:
+                print("Client did not respond!")
+
+    def addUser(self, userClient: socket.socket, userName: str):
+        user = User(userClient, userName)
+
+        user.client.send(
+            serialize(
+                {
+                    json_keys.TYPE: message_types.SUCCESS,
+                    json_keys.SUCCESS_TYPE: success_types.CONNECTED,
+                }
+            )
         )
 
-        try:
-            raw_message = client.recv(1024).decode(ENCODING)
-            response = json.loads(raw_message)
-            
-            if response[json_keys.TYPE] == message_types.NAME_RESP:
-                nickname = response[json_keys.NAME]
+        for u in self.users:
+            chat = ChatHistory([u, user])
 
-                if any(u.nickname == nickname for u in users):
-                    client.send(
-                        json.dumps(
-                            {
-                                json_keys.TYPE: message_types.ERROR,
-                                json_keys.ERROR_TYPE: error_types.NAME_TAKEN,
-                            }
-                        ).encode(ENCODING)
-                    )
-                else:
-                    user = User(client, nickname)
-                    users.append(user)
+        self.users.append(user)
+        print("Nickname is {}".format(userName))
+        users_names = list(map(lambda u: u.nickname, self.users))
 
-                    print("Nickname is {}".format(nickname))
+        self.broadcast(
+            user,
+            serialize(
+                {
+                    json_keys.TYPE: message_types.USERS,
+                    json_keys.USERS: users_names,
+                }
+            ),
+        )
 
-                    users_names = list(map(lambda u: u.nickname, users))
-                    broadcast(
-                        user,
-                        json.dumps(
-                            {
-                                json_keys.TYPE: message_types.USERS,
-                                json_keys.USERS: users_names,
-                            }
-                        ).encode(ENCODING),
-                    )
+        thread = threading.Thread(target=self.handle, args=(user,))
+        thread.start()
 
-                    thread = threading.Thread(target=handle, args=(user,))
-                    thread.start()
-            else:
-                print("Name expected, but wrong type received!")
-        except:
-            print("Client did not respond!")
+    def handle(self, user: User):
+        client = user.client
+        nickname = user.nickname
+        while True:
+            try:
+                recv = client.recv(1024)
+                print(recv)
+                received = deserialize(recv)
+                print(received[json_keys.TYPE])
+
+                # message = message.decode(ENCODING)
+                # message = "{}: {}".format(user.nickname, message)
+                # print(message)
+                # message = message.encode(ENCODING)
+                # self.broadcast(user, message)
+            except:
+                client.close()
+                print("{} left!".format(nickname))
+                self.users.remove(user)
+                # self.broadcast(user, "{} left!".format(nickname).encode(ENCODING))
+                break
+
+    def broadcast(self, user: User, message: bytes):
+        for u in self.users:
+            u.client.send(message)
 
 
-receive()
+app = ServerApp()

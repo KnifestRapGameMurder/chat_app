@@ -103,6 +103,7 @@ class MainWindow(QMainWindow):
 
     def setUsers(self, users: list):
         print(users)
+        
         for user_btn in self.user_btns:
             user_btn.destroy()
 
@@ -113,11 +114,19 @@ class MainWindow(QMainWindow):
                 user_btn = QPushButton(self.users_container)
                 user_btn.setMinimumSize(0, 50)
                 user_btn.setText(user)
+                userName = user
+                user_btn.clicked.connect(lambda: self.onUserBtnClick(userName))
                 self.verticalLayout_3.addWidget(user_btn)
                 self.user_btns.append(user_btn)
-                
+
         self.verticalLayout_3.removeItem(self.verticalSpacer)
         self.verticalLayout_3.addItem(self.verticalSpacer)
+
+    def setUserSelectCallback(self, callback):
+        self.userSelectCallback = callback
+
+    def onUserBtnClick(self, userName: str):
+        self.userSelectCallback(userName)
 
     def addMessageToHistory(self, message):
         chat = self.chat_history.toPlainText()
