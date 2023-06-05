@@ -76,6 +76,7 @@ class ClientApp:
                     chats = received[json_keys.CHATS]
                     print(chats)
                     self.chats = chats
+                    self.current_chat_id = ""
                     self.signal.chats_sig.emit(chats)
                 elif recv_type == message_types.DIRECT:
                     self.handleDirectMessage(received)

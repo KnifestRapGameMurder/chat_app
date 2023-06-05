@@ -102,9 +102,9 @@ class MainWindow(QMainWindow):
             self.input_field.clear()
 
     def setChats(self, chats: dict):
-        print("setChats")
-        print(chats)
-        
+        self.clearChat()
+        print("Chats update: " + str(chats))
+
         for chat_id in self.user_btns:
             self.user_btns[chat_id].deleteLater()
 

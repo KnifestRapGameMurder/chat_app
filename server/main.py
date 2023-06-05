@@ -51,12 +51,13 @@ class ServerApp:
 
             try:
                 response = deserialize(client.recv(1024))
-                print(response[json_keys.TYPE])
 
                 if response[json_keys.TYPE] == message_types.NAME_RESP:
                     nickname = response[json_keys.NAME]
 
                     if any(u.nickname == nickname for u in self.users):
+                        print(f"Join rejected: name '{nickname}' is already taken!")
+
                         client.send(
                             serialize(
                                 {
@@ -65,6 +66,7 @@ class ServerApp:
                                 }
                             )
                         )
+
                     else:
                         self.addUser(client, nickname)
                 else:
@@ -74,6 +76,8 @@ class ServerApp:
 
     def addUser(self, userClient: socket.socket, userName: str):
         user = User(userClient, userName)
+
+        print(f"Joined successfuly: {userName}")
 
         user.client.send(
             serialize(
@@ -90,13 +94,14 @@ class ServerApp:
             chat = ChatHistory([u, user])
             self.chat_histories[self.last_chat_id] = chat
 
+            print(f"New chat created: [ID: {self.last_chat_id}, Users:{[u, user]}]")
+
             self.users_chat_histories[user][self.last_chat_id] = chat
             self.users_chat_histories[u][self.last_chat_id] = chat
 
             self.last_chat_id += 1
 
         self.users.append(user)
-        print("Nickname is {}".format(userName))
 
         self.sendChats()
 
@@ -111,21 +116,18 @@ class ServerApp:
             try:
                 received = deserialize(client.recv(1024))
                 recv_type = received[json_keys.TYPE]
-                print(nickname + ": " + recv_type)
+
+                print(f"Requst from {nickname}: {recv_type}")
 
                 if recv_type == message_types.GET_CHAT:
                     chat_id = received[json_keys.CHAT_ID]
-                    print("Chat ID: " + chat_id)
-                    print(self.users_chat_histories[user])
+                    print(f"- Chat ID: {chat_id}")
+
                     chat: ChatHistory = self.users_chat_histories[user][int(chat_id)]
 
                     for message in chat.messages:
-                        print(
-                            "{} -> {}: {}".format(
-                                message.sender.nickname, nickname, message.text
-                            )
-                        )
-                        
+                        print("- {}: {}".format(message.sender.nickname, message.text))
+
                         client.send(
                             serialize(
                                 {
@@ -141,9 +143,10 @@ class ServerApp:
 
                 elif recv_type == message_types.DIRECT:
                     chat_id = received[json_keys.CHAT_ID]
+                    print(f"- Chat ID: {chat_id}")
+
                     message = received[json_keys.MESSAGE]
-                    print(chat_id)
-                    print(message)
+                    print(f"- {nickname}: {message}")
 
                     chat: ChatHistory = self.users_chat_histories[user][int(chat_id)]
                     chat.messages.append(Message(user, message))
@@ -162,35 +165,35 @@ class ServerApp:
                         ch_u.client.send(data)
 
             except:
-                print("An error occured!")
+                print(f"Connection with {nickname} closed!")
                 client.close()
                 self.users.remove(user)
-
-                temp_chat_histories = dict()
-                for chat_id in self.chat_histories:
-                    if user not in self.chat_histories[chat_id].users:
-                        temp_chat_histories[chat_id] = self.chat_histories[chat_id]
-                self.chat_histories = temp_chat_histories
 
                 self.sendChats()
 
                 break
 
     def sendChats(self):
-        print("sendChats")
+        print("Updating chats...")
 
-        for u in self.users:
+        for user in self.users:
             json_chats = dict()
 
-            chats = self.users_chat_histories[u]
+            chats = self.users_chat_histories[user]
             for chat_id in chats:
-                other_user_name = next(
-                    ch_u.nickname for ch_u in chats[chat_id].users if ch_u is not u
-                )
+                chat = chats[chat_id]
+                if all(ch_u in self.users for ch_u in chat.users):
+                    other_user_name = next(
+                        ch_u.nickname
+                        for ch_u in chats[chat_id].users
+                        if ch_u is not user
+                    )
 
-                json_chats[chat_id] = other_user_name
+                    json_chats[chat_id] = other_user_name
 
-            u.client.send(
+            print(f"Chats for {user.nickname}: {json_chats}")
+
+            user.client.send(
                 serialize(
                     {
                         json_keys.TYPE: message_types.CHATS,
@@ -201,10 +204,6 @@ class ServerApp:
 
     def getChat(self, chat_id):
         return self.chat_histories[chat_id]
-
-    def broadcast(self, user: User, message: bytes):
-        for u in self.users:
-            u.client.send(message)
 
 
 app = ServerApp()
