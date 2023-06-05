@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
         font = QFont()
         font.setPointSize(12)
         self.nickname_field.setFont(font)
+        self.nickname_field.setReadOnly(True)
 
         self.verticalLayout_2.addWidget(self.nickname_field)
 

@@ -40,15 +40,19 @@ class ClientApp:
             self.nickname = nickname
 
             self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client.connect((ip_address, 55555))
+            
+            try:
+                self.client.connect((ip_address, 55555))
 
-            self.is_client_active = True
+                self.is_client_active = True
 
-            self.signal = MySignal()
-            self.signal.connect_sig.connect(self.onConnected)
+                self.signal = MySignal()
+                self.signal.connect_sig.connect(self.onConnected)
 
-            receive_thread = threading.Thread(target=self.receive)
-            receive_thread.start()
+                receive_thread = threading.Thread(target=self.receive)
+                receive_thread.start()
+            except:
+                print("Invalid address")
 
     def receive(self):
         while self.is_client_active:
